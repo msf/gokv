@@ -9,38 +9,63 @@ import (
 )
 
 func main() {
-	db, err := pebble.Open("demo", &pebble.Options{})
+	pdb, err := pebble.Open("./tmp/demo", &pebble.Options{
+		DisableWAL:                  false,
+		MemTableSize:                64 << 20,
+		MemTableStopWritesThreshold: 3,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer pdb.Close()
+
 	key := []byte("hello")
-	if err := db.Set(key, []byte("world"), pebble.Sync); err != nil {
+	if err := pdb.Set(key, []byte("world"), pebble.NoSync); err != nil {
 		log.Fatal(err)
 	}
-	value, closer, err := db.Get(key)
+	value, closer, err := pdb.Get(key)
 	if err != nil {
 		log.Fatal(err)
 	}
+	closer.Close()
 	fmt.Printf("%s %s\n", key, value)
-	if err := closer.Close(); err != nil {
-		log.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		log.Fatal(err)
-	}
 
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	bdb, err := badger.Open(badger.DefaultOptions("./tmp/badger").
+		WithSyncWrites(true).
+		WithMemTableSize(64 << 20).
+		WithNumMemtables(3),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer bdb.Close()
 
 	// Your code here…
-	err := db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte("answer"), []byte("42"))
+	err = bdb.Update(func(txn *badger.Txn) error {
+		err := txn.Set(key, []byte("42"))
 		return err
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = bdb.View(func(txn *badger.Txn) error {
+		item, err := txn.Get(key)
+		if err != nil {
+			return err
+		}
+		err = item.Value(func(val []byte) error {
+
+			// Accessing val here is valid.
+			fmt.Printf("The answer is: %s\n", val)
+			return nil
+		})
+		return err
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }
