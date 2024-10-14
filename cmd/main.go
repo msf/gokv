@@ -42,6 +42,7 @@ func main() {
 	}
 	defer bdb.Close()
 
+	bdb.NewWriteBatch()
 	// Your code here…
 	err = bdb.Update(func(txn *badger.Txn) error {
 		err := txn.Set(key, []byte("42"))
